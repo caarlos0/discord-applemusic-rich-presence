@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -29,19 +30,23 @@ func main() {
 		details, err := getSongDetails()
 		if err != nil {
 			log.WithError(err).Error("will try again soon")
-			time.Sleep(10 * time.Second)
+			time.Sleep(30 * time.Second)
 			continue
 		}
 
 		if strings.TrimSpace(details.State) != "playing" {
-			log.Warn("not playing")
+			log.Info("not playing")
+			if err := client.SetActivity(client.Activity{}); err != nil {
+				log.WithError(err).Error("could not set activity, will retry later")
+			}
 			time.Sleep(30 * time.Second)
 			continue
 		}
 
 		song := details.Song
 		start := time.Now().Add(-1 * time.Duration(details.Position) * time.Second)
-		end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
+		// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
+		searchURL := fmt.Sprintf("https://music.apple.com/us/search?term=%s", url.QueryEscape(song.Name+" "+song.Artist))
 		if err := client.SetActivity(client.Activity{
 			State:      "Listening",
 			Details:    fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
@@ -51,11 +56,17 @@ func main() {
 			SmallText:  fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
 			Timestamps: &client.Timestamps{
 				Start: timePtr(start),
-				End:   timePtr(end),
+				// End:   timePtr(end),
+			},
+			Buttons: []*client.Button{
+				{
+					Label: "Search on Apple Music",
+					Url:   searchURL,
+				},
 			},
 		}); err != nil {
 			log.WithError(err).Error("could not set activity, will retry later")
-			time.Sleep(10 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 
 		log.WithField("song", song.Name).
@@ -84,52 +95,77 @@ func running() bool {
 	return strings.TrimSpace(string(bts)) == "1" && err == nil
 }
 
-func getSongDetails() (Details, error) {
+func getPart(s string) (string, error) {
 	bts, err := exec.Command(
 		"osascript",
 		"-e", "tell application \"Music\"",
-		"-e", "get {name, artist, album, year, duration} of current track & {player position, player state}",
+		"-e", s,
 		"-e", "end tell",
 	).CombinedOutput()
+	return strings.TrimSpace(string(bts)), err
+}
+
+func getSongDetails() (Details, error) {
+	name, err := getPart("get {name} of current track")
 	if err != nil {
 		return Details{}, err
 	}
-	parts := strings.Split(string(bts), ", ")
-	if len(parts) != 7 {
-		return Details{}, fmt.Errorf("invalid output: %q", string(bts))
+	artist, err := getPart("get {artist} of current track")
+	if err != nil {
+		return Details{}, err
 	}
-
-	year, err := strconv.Atoi(parts[3])
+	album, err := getPart("get {album} of current track")
+	if err != nil {
+		return Details{}, err
+	}
+	yearS, err := getPart("get {year} of current track")
+	if err != nil {
+		return Details{}, err
+	}
+	durationS, err := getPart("get {duration} of current track")
+	if err != nil {
+		return Details{}, err
+	}
+	positionS, err := getPart("get {player position}")
+	if err != nil {
+		return Details{}, err
+	}
+	state, err := getPart("get {player state}")
 	if err != nil {
 		return Details{}, err
 	}
 
-	duration, err := strconv.ParseFloat(parts[4], 64)
+	year, err := strconv.Atoi(yearS)
 	if err != nil {
 		return Details{}, err
 	}
 
-	position, err := strconv.ParseFloat(parts[5], 64)
+	duration, err := strconv.ParseFloat(durationS, 64)
 	if err != nil {
 		return Details{}, err
 	}
 
-	url, err := getArtwork(parts[1], parts[2], parts[0])
+	position, err := strconv.ParseFloat(positionS, 64)
+	if err != nil {
+		return Details{}, err
+	}
+
+	url, err := getArtwork(artist, album, name)
 	if err != nil {
 		return Details{}, err
 	}
 
 	return Details{
 		Song: Song{
-			Name:     parts[0],
-			Artist:   parts[1],
-			Album:    parts[2],
+			Name:     name,
+			Artist:   artist,
+			Album:    album,
 			Year:     year,
 			Duration: duration,
 			Artwork:  url,
 		},
 		Position: position,
-		State:    parts[6],
+		State:    state,
 	}, nil
 }
 
