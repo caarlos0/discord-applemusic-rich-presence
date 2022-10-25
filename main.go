@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -29,25 +32,29 @@ func main() {
 			continue
 		}
 
-		song := details.Song
-		state := "Paused"
-		if strings.TrimSpace(details.State) == "playing" {
-			state = fmt.Sprintf("Playing on %s...", song.Album)
+		if strings.TrimSpace(details.State) != "playing" {
+			log.Warn("not playing")
+			time.Sleep(30 * time.Second)
+			continue
 		}
 
+		song := details.Song
+		start := time.Now().Add(-1 * time.Duration(details.Position) * time.Second)
+		// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
 		if err := client.SetActivity(client.Activity{
-			State:      state,
-			Details:    fmt.Sprintf("%s - %s", song.Artist, song.Name),
-			LargeImage: "applemusic",
-			SmallImage: "play",
-			LargeText:  state,
-			SmallText:  fmt.Sprintf("Listening to %s - %s (%s)", song.Artist, song.Name, song.Album),
+			State:      "Listening",
+			Details:    fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
+			LargeImage: song.Artwork,
+			SmallImage: "applemusic",
+			LargeText:  song.Name,
+			SmallText:  fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
 			Timestamps: &client.Timestamps{
-				Start: timePtr(time.Now().Add(-1 * time.Duration(details.Position) * time.Second)),
-				// End: ,
+				Start: timePtr(start),
+				// End:   timePtr(end),
 			},
 		}); err != nil {
-			log.WithError(err).Fatal("could not create rich presence client")
+			log.WithError(err).Error("could not set activity, will retry later")
+			time.Sleep(10 * time.Second)
 		}
 
 		log.WithField("song", song.Name).
@@ -106,6 +113,11 @@ func getSongDetails() (Details, error) {
 		return Details{}, err
 	}
 
+	url, err := getArtwork(parts[1], parts[2], parts[0])
+	if err != nil {
+		return Details{}, err
+	}
+
 	return Details{
 		Song: Song{
 			Name:     parts[0],
@@ -113,6 +125,7 @@ func getSongDetails() (Details, error) {
 			Album:    parts[2],
 			Year:     year,
 			Duration: duration,
+			Artwork:  url,
 		},
 		Position: position,
 		State:    parts[6],
@@ -131,4 +144,37 @@ type Song struct {
 	Album    string
 	Year     int
 	Duration float64
+	Artwork  string
+}
+
+// TODO: cache this
+func getArtwork(artist, album, song string) (string, error) {
+	artist = strings.ReplaceAll(artist, " ", "+")
+	album = strings.ReplaceAll(album+"+"+song, " ", "+")
+	response, err := http.Get("https://itunes.apple.com/search?term=" + artist + "+" + album + "&limit=1&entity=song")
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+
+	data, err := io.ReadAll(response.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var result getArtworkResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return "", err
+	}
+	if result.ResultCount == 0 {
+		return "", nil
+	}
+	return result.Results[0].ArtworkUrl100, nil
+}
+
+type getArtworkResult struct {
+	ResultCount int `json:"resultCount"`
+	Results     []struct {
+		ArtworkUrl100 string `json:"artworkUrl100"`
+	} `json:"results"`
 }
