@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/log"
+	"github.com/cheshir/ttlcache"
 	"github.com/hugolgst/rich-go/client"
 )
 
@@ -147,29 +148,40 @@ type Song struct {
 	Artwork  string
 }
 
-// TODO: cache this
+var artworkCache = ttlcache.New(time.Minute)
+
 func getArtwork(artist, album, song string) (string, error) {
 	artist = strings.ReplaceAll(artist, " ", "+")
-	album = strings.ReplaceAll(album+"+"+song, " ", "+")
-	response, err := http.Get("https://itunes.apple.com/search?term=" + artist + "+" + album + "&limit=1&entity=song")
+	album = strings.ReplaceAll(album, " ", "+")
+	song = strings.ReplaceAll(song, " ", "+")
+	key := strings.Join([]string{artist, album, song}, "+")
+
+	cached, ok := artworkCache.Get(ttlcache.StringKey(key))
+	if ok {
+		return cached.(string), nil
+	}
+
+	resp, err := http.Get("https://itunes.apple.com/search?term=" + key + "&limit=1&entity=song")
 	if err != nil {
 		return "", err
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
 
-	data, err := io.ReadAll(response.Body)
+	bts, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
 
 	var result getArtworkResult
-	if err := json.Unmarshal(data, &result); err != nil {
+	if err := json.Unmarshal(bts, &result); err != nil {
 		return "", err
 	}
 	if result.ResultCount == 0 {
 		return "", nil
 	}
-	return result.Results[0].ArtworkUrl100, nil
+	url := result.Results[0].ArtworkUrl100
+	artworkCache.Set(ttlcache.StringKey(key), url, time.Hour)
+	return url, nil
 }
 
 type getArtworkResult struct {
