@@ -24,3 +24,12 @@ And that should do the trick 😃
 It looks more or less like this:
 
 <img width="334" alt="CleanShot 2022-10-25 at 00 44 31@2x" src="https://user-images.githubusercontent.com/245435/197677486-eebc2ecf-b8be-4de2-8eb7-650042718789.png">
+
+---
+
+###### Hat tip to:
+
+- https://github.com/AB-Law/Apple-Music-Discord-Rich-Presence
+- https://github.com/rohilpatel1/Apple-Music-Rich-Presence
+
+And many other projects that do the same thing.
