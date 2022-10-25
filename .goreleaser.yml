@@ -10,13 +10,28 @@ brews:
     tap:
       owner: caarlos0
       name: homebrew-tap
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
-    commit_msg_template: Brew formula update for {{ .ProjectName }} version {{ .PrefixedTag }}
-    folder: Formula
     description: 'Apple Music Rich Presence for Discord'
     homepage: 'https://caarlos0.dev'
+    plist: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+        <dict>
+          <key>Label</key>
+          <string>discord-applemusic-rich-presence</string>
+          <key>ProgramArguments</key>
+          <array>
+            <string>#{bin}/discord-applemusic-rich-presence</string>
+          </array>
+          <key>RunAtLoad</key>
+          <true/>
+          <key>StandardOutPath</key>
+          <string>#{var}/log/discord-applemusic-rich-presence.log</string>
+          <key>StandardErrorPath</key>
+          <string>#{var}/log/discord-applemusic-rich-presence.log</string>
+        </dict>
+      </plist>
+
 builds:
   - id: discord-applemusic-rich-presence
     goos:
