@@ -1,0 +1,77 @@
+release:
+  footer: |
+    **Full Changelog**: https://github.com/caarlos0/discord-applemusic-rich-presence/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ---
+
+    _Released with [GoReleaser Pro](https://goreleaser.com/pro)!_
+brews:
+  - name: discord-applemusic-rich-presence
+    tap:
+      owner: caarlos0
+      name: homebrew-tap
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: Brew formula update for {{ .ProjectName }} version {{ .PrefixedTag }}
+    folder: Formula
+    description: 'Apple Music Rich Presence for Discord'
+    homepage: 'https://caarlos0.dev'
+builds:
+  - id: discord-applemusic-rich-presence
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }} -X main.builtBy=goreleaser
+    flags:
+      - -trimpath
+    env:
+      - CGO_ENABLED=1
+archives:
+  - id: default
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}{{ if not (eq .Amd64 "v1") }}{{ .Amd64 }}{{ end }}'
+    format: tar.gz
+    files:
+      - src: license*
+      - src: LICENSE*
+      - src: readme*
+      - src: README*
+      - src: changelog*
+      - src: CHANGELOG*
+changelog:
+  filters:
+    exclude:
+      - '^test:'
+      - ^chore
+      - merge conflict
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+      - go mod tidy
+  sort: asc
+  use: github
+  groups:
+    - title: Dependency updates
+      regexp: ^.*feat\(deps\)*:+.*$
+      order: 300
+    - title: New Features
+      regexp: ^.*feat[(\w)]*:+.*$
+      order: 100
+    - title: Bug fixes
+      regexp: ^.*fix[(\w)]*:+.*$
+      order: 200
+    - title: Documentation updates
+      regexp: ^.*docs[(\w)]*:+.*$
+      order: 400
+    - title: Other work
+      order: 9999
+before:
+  hooks:
+    - cmd: go mod tidy
+gomod:
+  proxy: true
+  gobinary: go
