@@ -10,6 +10,7 @@ brews:
     tap:
       owner: caarlos0
       name: homebrew-tap
+    folder: Formula
     description: 'Apple Music Rich Presence for Discord'
     homepage: 'https://caarlos0.dev'
     plist: |

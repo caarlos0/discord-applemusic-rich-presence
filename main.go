@@ -41,7 +41,7 @@ func main() {
 
 		song := details.Song
 		start := time.Now().Add(-1 * time.Duration(details.Position) * time.Second)
-		// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
+		end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
 		if err := client.SetActivity(client.Activity{
 			State:      "Listening",
 			Details:    fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
@@ -51,7 +51,7 @@ func main() {
 			SmallText:  fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
 			Timestamps: &client.Timestamps{
 				Start: timePtr(start),
-				// End:   timePtr(end),
+				End:   timePtr(end),
 			},
 		}); err != nil {
 			log.WithError(err).Error("could not set activity, will retry later")
