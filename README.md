@@ -1,4 +1,4 @@
-# Discord's Rich Presence for Apple Music
+# Discord's Rich Presence from Apple Music
 
 This is a simple binary that uses Apple Script to grab the current song being
 played on Apple Music, and reports it as Discord Rich Presence.
