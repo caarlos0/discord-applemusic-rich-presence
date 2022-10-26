@@ -230,10 +230,10 @@ func (ac *activityConnection) play(details Details) error {
 	}
 
 	if err := client.SetActivity(client.Activity{
-		State:      "Listening",
-		Details:    fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
-		LargeImage: song.Artwork,
-		SmallImage: "applemusic",
+		State:      fmt.Sprintf("by %s (%s)", song.Artist, song.Album),
+		Details:    song.Name,
+		LargeImage: firstNonEmpty(song.Artwork, "applemusic"),
+		SmallImage: "play",
 		LargeText:  song.Name,
 		SmallText:  fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
 		Timestamps: &client.Timestamps{
@@ -253,10 +253,18 @@ func (ac *activityConnection) play(details Details) error {
 	log.WithField("song", details.Song.Name).
 		WithField("album", details.Song.Album).
 		WithField("artist", details.Song.Artist).
-		WithField("state", strings.TrimSpace(details.State)).
 		WithField("year", details.Song.Year).
 		WithField("duration", time.Duration(details.Song.Duration)*time.Second).
 		WithField("position", time.Duration(details.Position)*time.Second).
 		Info("now playing")
 	return nil
+}
+
+func firstNonEmpty(ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
 }
