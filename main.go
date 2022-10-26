@@ -16,6 +16,8 @@ import (
 	"github.com/hugolgst/rich-go/client"
 )
 
+const statePlaying = "playing"
+
 func main() {
 	ac := activityConnection{}
 	for {
@@ -33,7 +35,7 @@ func main() {
 			continue
 		}
 
-		if strings.TrimSpace(details.State) != "playing" {
+		if details.State != statePlaying {
 			if ac.connected {
 				log.Info("not playing")
 				ac.stop()
@@ -82,13 +84,14 @@ func getNowPlaying() (Details, error) {
 	defer func() {
 		log.WithField("took", time.Since(init)).Info("got info")
 	}()
+
 	positionState, err := tellMusic("get {player position, player state}")
 	if err != nil {
 		return Details{}, err
 	}
 
 	state := strings.Split(positionState, ", ")[1]
-	if state != "playing" {
+	if state != statePlaying {
 		return Details{
 			State: state,
 		}, nil
