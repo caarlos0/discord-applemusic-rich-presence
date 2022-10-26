@@ -13,25 +13,11 @@ brews:
     folder: Formula
     description: 'Apple Music Rich Presence for Discord'
     homepage: 'https://caarlos0.dev'
-    plist: |
-      <?xml version="1.0" encoding="UTF-8"?>
-      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-      <plist version="1.0">
-        <dict>
-          <key>Label</key>
-          <string>discord-applemusic-rich-presence</string>
-          <key>ProgramArguments</key>
-          <array>
-            <string>#{bin}/discord-applemusic-rich-presence</string>
-          </array>
-          <key>RunAtLoad</key>
-          <true/>
-          <key>StandardOutPath</key>
-          <string>#{var}/log/discord-applemusic-rich-presence.log</string>
-          <key>StandardErrorPath</key>
-          <string>#{var}/log/discord-applemusic-rich-presence.log</string>
-        </dict>
-      </plist>
+    service: |
+      run [opt_bin/"discord-applemusic-rich-presence"]
+      keep_alive true
+      log_path var/"log/discord-applemusic-rich-presence.log"
+      error_log_path var/"log/discord-applemusic-rich-presence.log"
 
 builds:
   - id: discord-applemusic-rich-presence
