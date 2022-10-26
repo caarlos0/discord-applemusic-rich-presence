@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -19,22 +20,45 @@ import (
 const statePlaying = "playing"
 
 var (
-	shortSleep = 10 * time.Second
-	longSleep  = time.Second
+	shortSleep   = 5 * time.Second
+	longSleep    = time.Minute
+	songCache    = ttlcache.New(time.Minute)
+	artworkCache = ttlcache.New(time.Minute)
 )
 
 func main() {
+	defer func() {
+		_ = songCache.Close()
+		_ = artworkCache.Close()
+	}()
+
+	if os.Getenv("DARP_DEBUG") != "" {
+		log.SetLevelFromString("debug")
+	}
 	ac := activityConnection{}
+	defer func() { ac.stop() }()
+
+	running := false
 	for {
-		if !isRunning() {
+		if !running {
+			running = isRunning()
+		}
+		if !running {
+			log.WithField("sleep", longSleep).Info("Apple Music is not running")
 			ac.stop()
 			time.Sleep(longSleep)
 			continue
 		}
-
 		details, err := getNowPlaying()
 		if err != nil {
-			log.WithError(err).Error("will try again soon")
+			if strings.Contains(err.Error(), "(-1728)") {
+				log.WithField("sleep", longSleep).Info("Apple Music stopped running")
+				ac.stop()
+				time.Sleep(longSleep)
+				continue
+			}
+
+			log.WithError(err).WithField("sleep", shortSleep).Warn("will try again soon")
 			ac.stop()
 			time.Sleep(shortSleep)
 			continue
@@ -50,7 +74,7 @@ func main() {
 		}
 
 		if err := ac.play(details); err != nil {
-			log.WithError(err).Error("could not set activity, will retry later")
+			log.WithError(err).Warn("could not set activity, will retry later")
 		}
 
 		time.Sleep(shortSleep)
@@ -69,7 +93,7 @@ func isRunning() bool {
 		"-e", "end tell",
 	).CombinedOutput()
 	if err != nil {
-		log.WithError(err).Fatal("could not check if Music is running")
+		log.WithError(err).Warn("could not check if Music is running")
 	}
 	return strings.TrimSpace(string(bts)) == "1" && err == nil
 }
@@ -81,7 +105,10 @@ func tellMusic(s string) (string, error) {
 		"-e", s,
 		"-e", "end tell",
 	).CombinedOutput()
-	return strings.TrimSpace(string(bts)), err
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", strings.TrimSpace(string(bts)), err)
+	}
+	return strings.TrimSpace(string(bts)), nil
 }
 
 func getNowPlaying() (Details, error) {
@@ -90,15 +117,35 @@ func getNowPlaying() (Details, error) {
 		log.WithField("took", time.Since(init)).Info("got info")
 	}()
 
-	positionState, err := tellMusic("get {player position, player state}")
+	initialState, err := tellMusic("get {database id} of current track & {player position, player state}")
 	if err != nil {
 		return Details{}, err
 	}
 
-	state := strings.Split(positionState, ", ")[1]
+	songID, err := strconv.ParseInt(strings.Split(initialState, ", ")[0], 10, 64)
+	if err != nil {
+		return Details{}, err
+	}
+
+	position, err := strconv.ParseFloat(strings.Split(initialState, ", ")[1], 64)
+	if err != nil {
+		return Details{}, err
+	}
+
+	state := strings.Split(initialState, ", ")[2]
 	if state != statePlaying {
 		return Details{
 			State: state,
+		}, nil
+	}
+
+	cached, ok := songCache.Get(ttlcache.Int64Key(songID))
+	if ok {
+		log.WithField("songID", songID).Debug("got song from cache")
+		return Details{
+			Song:     cached.(Song),
+			Position: position,
+			State:    state,
 		}, nil
 	}
 
@@ -129,25 +176,25 @@ func getNowPlaying() (Details, error) {
 		return Details{}, err
 	}
 
-	position, err := strconv.ParseFloat(strings.Split(positionState, ", ")[0], 64)
-	if err != nil {
-		return Details{}, err
-	}
-
 	url, err := getArtwork(artist, album, name)
 	if err != nil {
 		return Details{}, err
 	}
 
+	song := Song{
+		ID:       songID,
+		Name:     name,
+		Artist:   artist,
+		Album:    album,
+		Year:     year,
+		Duration: duration,
+		Artwork:  url,
+	}
+
+	songCache.Set(ttlcache.Int64Key(songID), song, 24*time.Hour)
+
 	return Details{
-		Song: Song{
-			Name:     name,
-			Artist:   artist,
-			Album:    album,
-			Year:     year,
-			Duration: duration,
-			Artwork:  url,
-		},
+		Song:     song,
 		Position: position,
 		State:    state,
 	}, nil
@@ -160,6 +207,7 @@ type Details struct {
 }
 
 type Song struct {
+	ID       int64
 	Name     string
 	Artist   string
 	Album    string
@@ -167,8 +215,6 @@ type Song struct {
 	Duration float64
 	Artwork  string
 }
-
-var artworkCache = ttlcache.New(time.Minute)
 
 func getArtwork(artist, album, song string) (string, error) {
 	artist = strings.ReplaceAll(artist, " ", "+")
@@ -178,6 +224,7 @@ func getArtwork(artist, album, song string) (string, error) {
 
 	cached, ok := artworkCache.Get(ttlcache.StringKey(key))
 	if ok {
+		log.WithField("key", key).Debug("got album artwork from cache")
 		return cached.(string), nil
 	}
 
@@ -212,18 +259,41 @@ type getArtworkResult struct {
 }
 
 type activityConnection struct {
-	connected bool
+	connected    bool
+	lastSongID   int64
+	lastPosition float64
 }
 
 func (ac *activityConnection) stop() {
 	if ac.connected {
 		client.Logout()
 		ac.connected = false
+		ac.lastPosition = 0.0
+		ac.lastSongID = 0
 	}
 }
 
 func (ac *activityConnection) play(details Details) error {
 	song := details.Song
+	if ac.lastSongID == song.ID {
+		if details.Position >= ac.lastPosition {
+			log.
+				WithField("songID", song.ID).
+				WithField("position", details.Position).
+				Debug("ongoing activity, ignoring")
+			return nil
+		}
+	}
+	log.
+		WithField("lastSongID", ac.lastSongID).
+		WithField("songID", song.ID).
+		WithField("lastPosition", ac.lastPosition).
+		WithField("position", details.Position).
+		Debug("new event")
+
+	ac.lastPosition = details.Position
+	ac.lastSongID = song.ID
+
 	start := time.Now().Add(-1 * time.Duration(details.Position) * time.Second)
 	// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
 	searchURL := fmt.Sprintf("https://music.apple.com/us/search?term=%s", url.QueryEscape(song.Name+" "+song.Artist))
