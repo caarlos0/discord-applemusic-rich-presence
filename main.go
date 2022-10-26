@@ -19,35 +19,31 @@ import (
 func main() {
 	ac := activityConnection{}
 	for {
-		if !running() {
+		if !isRunning() {
 			ac.stop()
 			time.Sleep(time.Minute)
 			continue
 		}
 
-		details, err := getSongDetails()
+		details, err := getNowPlaying()
 		if err != nil {
 			log.WithError(err).Error("will try again soon")
 			ac.stop()
-			time.Sleep(30 * time.Second)
+			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		if strings.TrimSpace(details.State) != "playing" {
-			log.Info("not playing")
-			ac.stop()
-			time.Sleep(30 * time.Second)
+			if ac.connected {
+				log.Info("not playing")
+				ac.stop()
+			}
+			time.Sleep(5 * time.Second)
 			continue
 		}
-		err = ac.play(details)
-		if err != nil {
+
+		if err := ac.play(details); err != nil {
 			log.WithError(err).Error("could not set activity, will retry later")
-		} else {
-			log.WithField("song", details.Song.Name).
-				WithField("album", details.Song.Album).
-				WithField("artist", details.Song.Artist).
-				WithField("state", strings.TrimSpace(details.State)).
-				Info("reported")
 		}
 
 		time.Sleep(5 * time.Second)
@@ -58,7 +54,7 @@ func timePtr(t time.Time) *time.Time {
 	return &t
 }
 
-func running() bool {
+func isRunning() bool {
 	bts, err := exec.Command(
 		"osascript",
 		"-e", "tell application \"System Events\"",
@@ -71,7 +67,7 @@ func running() bool {
 	return strings.TrimSpace(string(bts)) == "1" && err == nil
 }
 
-func getPart(s string) (string, error) {
+func tellMusic(s string) (string, error) {
 	bts, err := exec.Command(
 		"osascript",
 		"-e", "tell application \"Music\"",
@@ -81,47 +77,51 @@ func getPart(s string) (string, error) {
 	return strings.TrimSpace(string(bts)), err
 }
 
-func getSongDetails() (Details, error) {
-	name, err := getPart("get {name} of current track")
-	if err != nil {
-		return Details{}, err
-	}
-	artist, err := getPart("get {artist} of current track")
-	if err != nil {
-		return Details{}, err
-	}
-	album, err := getPart("get {album} of current track")
-	if err != nil {
-		return Details{}, err
-	}
-	yearS, err := getPart("get {year} of current track")
-	if err != nil {
-		return Details{}, err
-	}
-	durationS, err := getPart("get {duration} of current track")
-	if err != nil {
-		return Details{}, err
-	}
-	positionS, err := getPart("get {player position}")
-	if err != nil {
-		return Details{}, err
-	}
-	state, err := getPart("get {player state}")
+func getNowPlaying() (Details, error) {
+	init := time.Now()
+	defer func() {
+		log.WithField("took", time.Since(init)).Info("got info")
+	}()
+	positionState, err := tellMusic("get {player position, player state}")
 	if err != nil {
 		return Details{}, err
 	}
 
-	year, err := strconv.Atoi(yearS)
+	state := strings.Split(positionState, ", ")[1]
+	if state != "playing" {
+		return Details{
+			State: state,
+		}, nil
+	}
+
+	name, err := tellMusic("get {name} of current track")
+	if err != nil {
+		return Details{}, err
+	}
+	artist, err := tellMusic("get {artist} of current track")
+	if err != nil {
+		return Details{}, err
+	}
+	album, err := tellMusic("get {album} of current track")
+	if err != nil {
+		return Details{}, err
+	}
+	yearDuration, err := tellMusic("get {year, duration} of current track")
 	if err != nil {
 		return Details{}, err
 	}
 
-	duration, err := strconv.ParseFloat(durationS, 64)
+	year, err := strconv.Atoi(strings.Split(yearDuration, ", ")[0])
 	if err != nil {
 		return Details{}, err
 	}
 
-	position, err := strconv.ParseFloat(positionS, 64)
+	duration, err := strconv.ParseFloat(strings.Split(yearDuration, ", ")[1], 64)
+	if err != nil {
+		return Details{}, err
+	}
+
+	position, err := strconv.ParseFloat(strings.Split(positionState, ", ")[0], 64)
 	if err != nil {
 		return Details{}, err
 	}
@@ -226,7 +226,7 @@ func (ac *activityConnection) play(details Details) error {
 		ac.connected = true
 	}
 
-	return client.SetActivity(client.Activity{
+	if err := client.SetActivity(client.Activity{
 		State:      "Listening",
 		Details:    fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
 		LargeImage: song.Artwork,
@@ -243,5 +243,17 @@ func (ac *activityConnection) play(details Details) error {
 				Url:   searchURL,
 			},
 		},
-	})
+	}); err != nil {
+		return err
+	}
+
+	log.WithField("song", details.Song.Name).
+		WithField("album", details.Song.Album).
+		WithField("artist", details.Song.Artist).
+		WithField("state", strings.TrimSpace(details.State)).
+		WithField("year", details.Song.Year).
+		WithField("duration", time.Duration(details.Song.Duration)*time.Second).
+		WithField("position", time.Duration(details.Position)*time.Second).
+		Info("now playing")
+	return nil
 }
