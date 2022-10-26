@@ -18,12 +18,17 @@ import (
 
 const statePlaying = "playing"
 
+var (
+	shortSleep = 10 * time.Second
+	longSleep  = time.Second
+)
+
 func main() {
 	ac := activityConnection{}
 	for {
 		if !isRunning() {
 			ac.stop()
-			time.Sleep(time.Minute)
+			time.Sleep(longSleep)
 			continue
 		}
 
@@ -31,7 +36,7 @@ func main() {
 		if err != nil {
 			log.WithError(err).Error("will try again soon")
 			ac.stop()
-			time.Sleep(5 * time.Second)
+			time.Sleep(shortSleep)
 			continue
 		}
 
@@ -40,7 +45,7 @@ func main() {
 				log.Info("not playing")
 				ac.stop()
 			}
-			time.Sleep(5 * time.Second)
+			time.Sleep(shortSleep)
 			continue
 		}
 
@@ -48,7 +53,7 @@ func main() {
 			log.WithError(err).Error("could not set activity, will retry later")
 		}
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(shortSleep)
 	}
 }
 
@@ -250,11 +255,11 @@ func (ac *activityConnection) play(details Details) error {
 		return err
 	}
 
-	log.WithField("song", details.Song.Name).
-		WithField("album", details.Song.Album).
-		WithField("artist", details.Song.Artist).
-		WithField("year", details.Song.Year).
-		WithField("duration", time.Duration(details.Song.Duration)*time.Second).
+	log.WithField("song", song.Name).
+		WithField("album", song.Album).
+		WithField("artist", song.Artist).
+		WithField("year", song.Year).
+		WithField("duration", time.Duration(song.Duration)*time.Second).
 		WithField("position", time.Duration(details.Position)*time.Second).
 		Info("now playing")
 	return nil
