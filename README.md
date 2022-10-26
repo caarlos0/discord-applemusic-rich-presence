@@ -23,13 +23,13 @@ brew services start caarlos0/tap/discord-applemusic-rich-presence
 
 And that should do the trick 😃
 
-## How it looks like?
+## F.A.Q.
+
+### How it looks like?
 
 It looks more or less like this:
 
 <img width="311" alt="CleanShot 2022-10-25 at 22 42 00@2x" src="https://user-images.githubusercontent.com/245435/197914697-9c9d8060-54f7-4768-903f-ccce98f91242.png">
-
-## F.A.Q.
 
 ### Can it look more like the Spotify integration?
 
