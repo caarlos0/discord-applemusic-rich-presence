@@ -17,12 +17,10 @@ import (
 )
 
 func main() {
-	if err := client.Login("861702238472241162"); err != nil {
-		log.WithError(err).Fatal("could not create rich presence client")
-	}
-
+	ac := activityConnection{}
 	for {
 		if !running() {
+			ac.stop()
 			time.Sleep(time.Minute)
 			continue
 		}
@@ -30,50 +28,28 @@ func main() {
 		details, err := getSongDetails()
 		if err != nil {
 			log.WithError(err).Error("will try again soon")
+			ac.stop()
 			time.Sleep(30 * time.Second)
 			continue
 		}
 
 		if strings.TrimSpace(details.State) != "playing" {
 			log.Info("not playing")
-			if err := client.SetActivity(client.Activity{}); err != nil {
-				log.WithError(err).Error("could not set activity, will retry later")
-			}
+			ac.stop()
 			time.Sleep(30 * time.Second)
 			continue
 		}
-
-		song := details.Song
-		start := time.Now().Add(-1 * time.Duration(details.Position) * time.Second)
-		// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
-		searchURL := fmt.Sprintf("https://music.apple.com/us/search?term=%s", url.QueryEscape(song.Name+" "+song.Artist))
-		if err := client.SetActivity(client.Activity{
-			State:      "Listening",
-			Details:    fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
-			LargeImage: song.Artwork,
-			SmallImage: "applemusic",
-			LargeText:  song.Name,
-			SmallText:  fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
-			Timestamps: &client.Timestamps{
-				Start: timePtr(start),
-				// End:   timePtr(end),
-			},
-			Buttons: []*client.Button{
-				{
-					Label: "Search on Apple Music",
-					Url:   searchURL,
-				},
-			},
-		}); err != nil {
+		err = ac.play(details)
+		if err != nil {
 			log.WithError(err).Error("could not set activity, will retry later")
-			time.Sleep(5 * time.Second)
+		} else {
+			log.WithField("song", details.Song.Name).
+				WithField("album", details.Song.Album).
+				WithField("artist", details.Song.Artist).
+				WithField("state", strings.TrimSpace(details.State)).
+				Info("reported")
 		}
 
-		log.WithField("song", song.Name).
-			WithField("album", song.Album).
-			WithField("artist", song.Artist).
-			WithField("state", strings.TrimSpace(details.State)).
-			Info("reported")
 		time.Sleep(5 * time.Second)
 	}
 }
@@ -225,4 +201,47 @@ type getArtworkResult struct {
 	Results     []struct {
 		ArtworkUrl100 string `json:"artworkUrl100"`
 	} `json:"results"`
+}
+
+type activityConnection struct {
+	connected bool
+}
+
+func (ac *activityConnection) stop() {
+	if ac.connected {
+		client.Logout()
+		ac.connected = false
+	}
+}
+
+func (ac *activityConnection) play(details Details) error {
+	song := details.Song
+	start := time.Now().Add(-1 * time.Duration(details.Position) * time.Second)
+	// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
+	searchURL := fmt.Sprintf("https://music.apple.com/us/search?term=%s", url.QueryEscape(song.Name+" "+song.Artist))
+	if !ac.connected {
+		if err := client.Login("861702238472241162"); err != nil {
+			log.WithError(err).Fatal("could not create rich presence client")
+		}
+		ac.connected = true
+	}
+
+	return client.SetActivity(client.Activity{
+		State:      "Listening",
+		Details:    fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
+		LargeImage: song.Artwork,
+		SmallImage: "applemusic",
+		LargeText:  song.Name,
+		SmallText:  fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
+		Timestamps: &client.Timestamps{
+			Start: timePtr(start),
+			// End:   timePtr(end),
+		},
+		Buttons: []*client.Button{
+			{
+				Label: "Search on Apple Music",
+				Url:   searchURL,
+			},
+		},
+	})
 }
