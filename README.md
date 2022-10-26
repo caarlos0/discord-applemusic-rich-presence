@@ -23,7 +23,7 @@ And that should do the trick 😃
 
 It looks more or less like this:
 
-<img width="334" alt="CleanShot 2022-10-25 at 00 44 31@2x" src="https://user-images.githubusercontent.com/245435/197677486-eebc2ecf-b8be-4de2-8eb7-650042718789.png">
+<img width="311" alt="CleanShot 2022-10-25 at 22 42 00@2x" src="https://user-images.githubusercontent.com/245435/197914697-9c9d8060-54f7-4768-903f-ccce98f91242.png">
 
 ---
 
