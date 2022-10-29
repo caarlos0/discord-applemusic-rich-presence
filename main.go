@@ -38,12 +38,8 @@ func main() {
 	ac := activityConnection{}
 	defer func() { ac.stop() }()
 
-	running := false
 	for {
-		if !running {
-			running = isRunning()
-		}
-		if !running {
+		if !isRunning() {
 			log.WithField("sleep", longSleep).Info("Apple Music is not running")
 			ac.stop()
 			time.Sleep(longSleep)
@@ -86,16 +82,8 @@ func timePtr(t time.Time) *time.Time {
 }
 
 func isRunning() bool {
-	bts, err := exec.Command(
-		"osascript",
-		"-e", "tell application \"System Events\"",
-		"-e", "count (every process whose name is \"Music\")",
-		"-e", "end tell",
-	).CombinedOutput()
-	if err != nil {
-		log.WithError(err).Warn("could not check if Music is running")
-	}
-	return strings.TrimSpace(string(bts)) == "1" && err == nil
+	bts, err := exec.Command("pgrep", "-f", "MacOS/Music").CombinedOutput()
+	return string(bts) != "" && err == nil
 }
 
 func tellMusic(s string) (string, error) {
