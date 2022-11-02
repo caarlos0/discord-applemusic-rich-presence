@@ -282,7 +282,7 @@ func (ac *activityConnection) play(details Details) error {
 	// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
 	searchURL := fmt.Sprintf("https://music.apple.com/us/search?term=%s", url.QueryEscape(song.Name+" "+song.Artist))
 	if !ac.connected {
-		if err := client.Login("861702238472241162"); err != nil {
+		if err := client.Login("1037157485783564328"); err != nil {
 			log.WithError(err).Fatal("could not create rich presence client")
 		}
 		ac.connected = true
