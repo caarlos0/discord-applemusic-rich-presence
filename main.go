@@ -205,11 +205,7 @@ type Song struct {
 }
 
 func getArtwork(artist, album, song string) (string, error) {
-	artist = strings.ReplaceAll(artist, " ", "+")
-	album = strings.ReplaceAll(album, " ", "+")
-	song = strings.ReplaceAll(song, " ", "+")
-	key := strings.Join([]string{artist, album, song}, "+")
-
+	key := url.QueryEscape(strings.Join([]string{artist, album, song}, " "))
 	cached, ok := artworkCache.Get(ttlcache.StringKey(key))
 	if ok {
 		log.WithField("key", key).Debug("got album artwork from cache")
