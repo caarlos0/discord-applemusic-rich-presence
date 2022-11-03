@@ -20,16 +20,18 @@ import (
 const statePlaying = "playing"
 
 var (
-	shortSleep   = 5 * time.Second
-	longSleep    = time.Minute
-	songCache    = ttlcache.New(time.Minute)
-	artworkCache = ttlcache.New(time.Minute)
+	shortSleep    = 5 * time.Second
+	longSleep     = time.Minute
+	songCache     = ttlcache.New(time.Minute)
+	artworkCache  = ttlcache.New(time.Minute)
+	shareURLCache = ttlcache.New(time.Minute)
 )
 
 func main() {
 	defer func() {
 		_ = songCache.Close()
 		_ = artworkCache.Close()
+		_ = shareURLCache.Close()
 	}()
 
 	if os.Getenv("DARP_DEBUG") != "" {
@@ -164,7 +166,7 @@ func getNowPlaying() (Details, error) {
 		return Details{}, err
 	}
 
-	url, err := getArtwork(artist, album, name)
+	metadata, err := getMetadata(artist, album, name)
 	if err != nil {
 		return Details{}, err
 	}
@@ -176,7 +178,8 @@ func getNowPlaying() (Details, error) {
 		Album:    album,
 		Year:     year,
 		Duration: duration,
-		Artwork:  url,
+		Artwork:  metadata.Artwork,
+		ShareURL: metadata.ShareURL,
 	}
 
 	songCache.Set(ttlcache.Int64Key(songID), song, 24*time.Hour)
@@ -202,44 +205,70 @@ type Song struct {
 	Year     int
 	Duration float64
 	Artwork  string
+	ShareURL string
 }
 
-func getArtwork(artist, album, song string) (string, error) {
+func getMetadata(artist, album, song string) (Metadata, error) {
 	key := url.QueryEscape(strings.Join([]string{artist, album, song}, " "))
-	cached, ok := artworkCache.Get(ttlcache.StringKey(key))
-	if ok {
+	artworkCached, artworkOk := artworkCache.Get(ttlcache.StringKey(key))
+	shareURLCached, shareURLOk := shareURLCache.Get(ttlcache.StringKey(key))
+	if artworkOk && shareURLOk {
 		log.WithField("key", key).Debug("got album artwork from cache")
-		return cached.(string), nil
+		return Metadata{
+			Artwork:  artworkCached.(string),
+			ShareURL: shareURLCached.(string),
+		}, nil
 	}
 
-	resp, err := http.Get("https://itunes.apple.com/search?term=" + key + "&limit=1&entity=song")
+	baseURL := "https://tools.applemediaservices.com/api/apple-media/music/US/search.json?types=songs&limit=1"
+	resp, err := http.Get(baseURL + "&term=" + key)
 	if err != nil {
-		return "", err
+		return Metadata{}, err
 	}
 	defer resp.Body.Close()
 
 	bts, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return Metadata{}, err
 	}
 
-	var result getArtworkResult
+	var result getMetadataResult
 	if err := json.Unmarshal(bts, &result); err != nil {
-		return "", err
+		return Metadata{}, err
 	}
-	if result.ResultCount == 0 {
-		return "", nil
+	if len(result.Songs.Data) == 0 {
+		return Metadata{}, nil
 	}
-	url := result.Results[0].ArtworkUrl100
-	artworkCache.Set(ttlcache.StringKey(key), url, time.Hour)
-	return url, nil
+
+	artwork := result.Songs.Data[0].Attributes.Artwork.URL
+	artwork = strings.Replace(artwork, "{w}", "512", 1)
+	artwork = strings.Replace(artwork, "{h}", "512", 1)
+	shareURL := result.Songs.Data[0].Attributes.URL
+
+	artworkCache.Set(ttlcache.StringKey(key), artwork, time.Hour)
+	shareURLCache.Set(ttlcache.StringKey(key), shareURL, time.Hour)
+	return Metadata{
+		Artwork:  artwork,
+		ShareURL: shareURL,
+	}, nil
 }
 
-type getArtworkResult struct {
-	ResultCount int `json:"resultCount"`
-	Results     []struct {
-		ArtworkUrl100 string `json:"artworkUrl100"`
-	} `json:"results"`
+type getMetadataResult struct {
+	Songs struct {
+		Data []struct {
+			Attributes struct {
+				URL     string `json:"url"`
+				Artwork struct {
+					URL string `json:"url"`
+				} `json:"artwork"`
+			} `json:"attributes"`
+		} `json:"data"`
+	} `json:"songs"`
+}
+
+type Metadata struct {
+	Artwork  string
+	ShareURL string
 }
 
 type activityConnection struct {
@@ -280,12 +309,21 @@ func (ac *activityConnection) play(details Details) error {
 
 	start := time.Now().Add(-1 * time.Duration(details.Position) * time.Second)
 	// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
-	searchURL := fmt.Sprintf("https://music.apple.com/us/search?term=%s", url.QueryEscape(song.Name+" "+song.Artist))
 	if !ac.connected {
 		if err := client.Login("1037157485783564328"); err != nil {
 			log.WithError(err).Fatal("could not create rich presence client")
 		}
 		ac.connected = true
+	}
+
+	var buttons []*client.Button
+	if song.ShareURL != "" {
+		buttons = []*client.Button{
+			{
+				Label: "Listen on Apple Music",
+				Url:   song.ShareURL,
+			},
+		}
 	}
 
 	if err := client.SetActivity(client.Activity{
@@ -299,12 +337,7 @@ func (ac *activityConnection) play(details Details) error {
 			Start: timePtr(start),
 			// End:   timePtr(end),
 		},
-		Buttons: []*client.Button{
-			{
-				Label: "Search on Apple Music",
-				Url:   searchURL,
-			},
-		},
+		Buttons: buttons,
 	}); err != nil {
 		return err
 	}
