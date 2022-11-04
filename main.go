@@ -41,8 +41,14 @@ func main() {
 	defer func() { ac.stop() }()
 
 	for {
-		if !isRunning() {
+		if !isRunning("Music") {
 			log.WithField("sleep", longSleep).Info("Apple Music is not running")
+			ac.stop()
+			time.Sleep(longSleep)
+			continue
+		}
+		if !isRunning("Discord") {
+			log.WithField("sleep", longSleep).Info("Discord is not running")
 			ac.stop()
 			time.Sleep(longSleep)
 			continue
@@ -83,8 +89,9 @@ func timePtr(t time.Time) *time.Time {
 	return &t
 }
 
-func isRunning() bool {
-	bts, err := exec.Command("pgrep", "-f", "MacOS/Music").CombinedOutput()
+func isRunning(app string) bool {
+	bts, err := exec.Command("pgrep", "-f", "MacOS/"+app).CombinedOutput()
+	log.WithField("app", app).Debug(string(bts))
 	return string(bts) != "" && err == nil
 }
 
