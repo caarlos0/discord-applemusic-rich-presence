@@ -310,7 +310,7 @@ func (ac *activityConnection) play(details Details) error {
 	start := time.Now().Add(-1 * time.Duration(details.Position) * time.Second)
 	// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
 	if !ac.connected {
-		if err := client.Login("1037157485783564328"); err != nil {
+		if err := client.Login("861702238472241162"); err != nil {
 			log.WithError(err).Fatal("could not create rich presence client")
 		}
 		ac.connected = true
