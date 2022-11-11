@@ -187,6 +187,7 @@ func getNowPlaying() (Details, error) {
 		Duration: duration,
 		Artwork:  metadata.Artwork,
 		ShareURL: metadata.ShareURL,
+		ShareID:  metadata.ID,
 	}
 
 	songCache.Set(ttlcache.Int64Key(songID), song, 24*time.Hour)
@@ -213,6 +214,7 @@ type Song struct {
 	Duration float64
 	Artwork  string
 	ShareURL string
+	ShareID  string
 }
 
 func getMetadata(artist, album, song string) (Metadata, error) {
@@ -247,6 +249,7 @@ func getMetadata(artist, album, song string) (Metadata, error) {
 		return Metadata{}, nil
 	}
 
+	id := result.Songs.Data[0].ID
 	artwork := result.Songs.Data[0].Attributes.Artwork.URL
 	artwork = strings.Replace(artwork, "{w}", "512", 1)
 	artwork = strings.Replace(artwork, "{h}", "512", 1)
@@ -255,6 +258,7 @@ func getMetadata(artist, album, song string) (Metadata, error) {
 	artworkCache.Set(ttlcache.StringKey(key), artwork, time.Hour)
 	shareURLCache.Set(ttlcache.StringKey(key), shareURL, time.Hour)
 	return Metadata{
+		ID:       id,
 		Artwork:  artwork,
 		ShareURL: shareURL,
 	}, nil
@@ -263,6 +267,7 @@ func getMetadata(artist, album, song string) (Metadata, error) {
 type getMetadataResult struct {
 	Songs struct {
 		Data []struct {
+			ID         string `json:"id"`
 			Attributes struct {
 				URL     string `json:"url"`
 				Artwork struct {
@@ -274,6 +279,7 @@ type getMetadataResult struct {
 }
 
 type Metadata struct {
+	ID       string
 	Artwork  string
 	ShareURL string
 }
@@ -325,12 +331,16 @@ func (ac *activityConnection) play(details Details) error {
 
 	var buttons []*client.Button
 	if song.ShareURL != "" {
-		buttons = []*client.Button{
-			{
-				Label: "Listen on Apple Music",
-				Url:   song.ShareURL,
-			},
-		}
+		buttons = append(buttons, &client.Button{
+			Label: "Listen on Apple Music",
+			Url:   song.ShareURL,
+		})
+	}
+	if song.ShareID != "" {
+		buttons = append(buttons, &client.Button{
+			Label: "View on SongLink",
+			Url:   fmt.Sprintf("https://song.link/i/%s", song.ShareID),
+		})
 	}
 
 	if err := client.SetActivity(client.Activity{
