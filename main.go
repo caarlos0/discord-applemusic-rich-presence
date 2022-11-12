@@ -34,7 +34,7 @@ func main() {
 		_ = shareURLCache.Close()
 	}()
 
-	if os.Getenv("DARP_DEBUG") != "" {
+	if os.Getenv("DEBUG") != "" {
 		log.SetLevelFromString("debug")
 	}
 	ac := activityConnection{}
@@ -336,10 +336,10 @@ func (ac *activityConnection) play(details Details) error {
 			Url:   song.ShareURL,
 		})
 	}
-	if song.ShareID != "" {
+	if link := songlink(song); link != "" {
 		buttons = append(buttons, &client.Button{
 			Label: "View on SongLink",
-			Url:   fmt.Sprintf("https://song.link/i/%s", song.ShareID),
+			Url:   link,
 		})
 	}
 
@@ -365,8 +365,16 @@ func (ac *activityConnection) play(details Details) error {
 		WithField("year", song.Year).
 		WithField("duration", time.Duration(song.Duration)*time.Second).
 		WithField("position", time.Duration(details.Position)*time.Second).
+		WithField("songlink", songlink(song)).
 		Info("now playing")
 	return nil
+}
+
+func songlink(song Song) string {
+	if song.ShareID == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://song.link/i/%s", song.ShareID)
 }
 
 func firstNonEmpty(ss ...string) string {
