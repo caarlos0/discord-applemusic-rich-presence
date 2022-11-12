@@ -29,7 +29,7 @@ And that should do the trick 😃
 
 It looks more or less like this:
 
-<img width="307" alt="CleanShot 2022-10-26 at 00 38 55@2x" src="https://user-images.githubusercontent.com/245435/197929144-48b4015b-ff03-4713-8baa-659189a07f66.png">
+![Screenshot](https://user-images.githubusercontent.com/245435/201494021-4b75aa4b-fb59-4a36-9ee5-c2d6ebae627d.png)
 
 
 ### Can it look more like the Spotify integration?
