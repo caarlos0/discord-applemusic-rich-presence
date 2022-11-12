@@ -34,21 +34,22 @@ func main() {
 		_ = shareURLCache.Close()
 	}()
 
-	if os.Getenv("DEBUG") != "" {
-		log.SetLevelFromString("debug")
+	log.SetLevelFromString("warning")
+	if level := os.Getenv("LOG_LEVEL"); level != "" {
+		log.SetLevelFromString(level)
 	}
 	ac := activityConnection{}
 	defer func() { ac.stop() }()
 
 	for {
 		if !isRunning("Music") {
-			log.WithField("sleep", longSleep).Info("Apple Music is not running")
+			log.WithField("sleep", longSleep).Warn("Apple Music is not running")
 			ac.stop()
 			time.Sleep(longSleep)
 			continue
 		}
 		if !isRunning("Discord") {
-			log.WithField("sleep", longSleep).Info("Discord is not running")
+			log.WithField("sleep", longSleep).Warn("Discord is not running")
 			ac.stop()
 			time.Sleep(longSleep)
 			continue
@@ -56,13 +57,13 @@ func main() {
 		details, err := getNowPlaying()
 		if err != nil {
 			if strings.Contains(err.Error(), "(-1728)") {
-				log.WithField("sleep", longSleep).Info("Apple Music stopped running")
+				log.WithField("sleep", longSleep).Warn("Apple Music stopped running")
 				ac.stop()
 				time.Sleep(longSleep)
 				continue
 			}
 
-			log.WithError(err).WithField("sleep", shortSleep).Warn("will try again soon")
+			log.WithError(err).WithField("sleep", shortSleep).Error("will try again soon")
 			ac.stop()
 			time.Sleep(shortSleep)
 			continue
@@ -91,7 +92,6 @@ func timePtr(t time.Time) *time.Time {
 
 func isRunning(app string) bool {
 	bts, err := exec.Command("pgrep", "-f", "MacOS/"+app).CombinedOutput()
-	log.WithField("app", app).Debug(string(bts))
 	return string(bts) != "" && err == nil
 }
 
@@ -366,7 +366,7 @@ func (ac *activityConnection) play(details Details) error {
 		WithField("duration", time.Duration(song.Duration)*time.Second).
 		WithField("position", time.Duration(details.Position)*time.Second).
 		WithField("songlink", songlink(song)).
-		Info("now playing")
+		Warn("now playing")
 	return nil
 }
 
