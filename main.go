@@ -48,7 +48,7 @@ func main() {
 			time.Sleep(longSleep)
 			continue
 		}
-		if !isRunning("Discord") {
+		if !isRunning("Discord") && !isRunning("Vesktop") {
 			log.WithField("sleep", longSleep).Warn("Discord is not running")
 			ac.stop()
 			time.Sleep(longSleep)
