@@ -107,6 +107,7 @@ func getMetadata(artist, album, song string) (Metadata, error) {
 	cache.albumArtwork.Set(ttlcache.StringKey(key), songMetadata.AlbumArtwork, time.Hour)
 	cache.shareURL.Set(ttlcache.StringKey(key), songMetadata.ShareURL, time.Hour)
 	cache.artistArtwork.Set(ttlcache.StringKey(key), artistArtwork, time.Hour)
+
 	return Metadata{
 		ID:            songMetadata.ID,
 		AlbumArtwork:  songMetadata.AlbumArtwork,
@@ -132,9 +133,7 @@ type getSongMetadataResult struct {
 type getArtistMetadataResult struct {
 	Artists struct {
 		Data []struct {
-			ID         string `json:"id"`
 			Attributes struct {
-				URL     string `json:"url"`
 				Artwork struct {
 					URL string `json:"url"`
 				} `json:"artwork"`
