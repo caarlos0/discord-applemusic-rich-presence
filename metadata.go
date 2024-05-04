@@ -82,9 +82,11 @@ func getArtistArtwork(key string) (string, error) {
 
 func getMetadata(artist, album, song string) (Metadata, error) {
 	key := url.QueryEscape(strings.Join([]string{artist, album, song}, " "))
+
 	albumArtworkCached, albumArtworkOk := cache.albumArtwork.Get(ttlcache.StringKey(key))
-	artistArtworkCached, artistArtworkOk := cache.artistArtwork.Get(ttlcache.StringKey(key))
 	shareURLCached, shareURLOk := cache.shareURL.Get(ttlcache.StringKey(key))
+
+	artistArtworkCached, artistArtworkOk := cache.artistArtwork.Get(ttlcache.StringKey(artist))
 
 	if albumArtworkOk && artistArtworkOk && shareURLOk {
 		log.WithField("key", key).Debug("got song info from cache")
