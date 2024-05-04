@@ -97,13 +97,26 @@ func getMetadata(artist, album, song string) (Metadata, error) {
 		}, nil
 	}
 
-	songMetadata, err := getSongMetadata(key)
-	if err != nil {
-		return Metadata{}, err
+	var err error
+	var songMetadata SongMetadata
+	var artistArtwork string
+
+	if albumArtworkOk && shareURLOk {
+		songMetadata = SongMetadata{
+			AlbumArtwork: albumArtworkCached.(string),
+			ShareURL:     shareURLCached.(string),
+		}
+	} else {
+		songMetadata, err = getSongMetadata(key)
+		if err != nil {
+			return Metadata{}, err
+		}
 	}
-	artistArtwork, err := getArtistArtwork(url.QueryEscape(artist))
-	if err != nil {
-		return Metadata{}, err
+
+	if artistArtworkOk {
+		artistArtwork = artistArtworkCached.(string)
+	} else {
+		artistArtwork, _ = getArtistArtwork(url.QueryEscape(artist))
 	}
 
 	cache.albumArtwork.Set(ttlcache.StringKey(key), songMetadata.AlbumArtwork, time.Hour)
