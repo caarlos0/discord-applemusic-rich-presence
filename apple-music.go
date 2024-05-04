@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/log"
-	"github.com/jellydator/ttlcache/v3"
+	"github.com/cheshir/ttlcache"
 )
 
 func tellMusic(s string) (string, error) {
@@ -52,11 +52,11 @@ func getNowPlaying() (Details, error) {
 		}, nil
 	}
 
-	cached := cache.song.Get(songID)
-	if cached != nil {
+	cached, cachedOk := cache.song.Get(ttlcache.Int64Key(songID))
+	if cachedOk {
 		log.WithField("songID", songID).Debug("got song from cache")
 		return Details{
-			Song:     cached.Value(),
+			Song:     cached.(Song),
 			Position: position,
 			State:    state,
 		}, nil
@@ -107,7 +107,7 @@ func getNowPlaying() (Details, error) {
 		ShareID:       metadata.ID,
 	}
 
-	cache.song.Set(songID, song, ttlcache.DefaultTTL)
+	cache.song.Set(ttlcache.Int64Key(songID), song, time.Hour)
 
 	return Details{
 		Song:     song,

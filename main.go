@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/caarlos0/log"
+	"github.com/cheshir/ttlcache"
 	"github.com/hugolgst/rich-go/client"
-	"github.com/jellydator/ttlcache/v3"
 )
 
 const statePlaying = "playing"
@@ -21,18 +21,18 @@ var (
 )
 
 type Cache struct {
-	song          *ttlcache.Cache[int64, Song]
-	albumArtwork  *ttlcache.Cache[string, string]
-	artistArtwork *ttlcache.Cache[string, string]
-	shareURL      *ttlcache.Cache[string, string]
+	song          *ttlcache.Cache
+	albumArtwork  *ttlcache.Cache
+	artistArtwork *ttlcache.Cache
+	shareURL      *ttlcache.Cache
 }
 
 func main() {
 	cache = Cache{
-		song:          ttlcache.New[int64, Song](),
-		albumArtwork:  ttlcache.New[string, string](),
-		artistArtwork: ttlcache.New[string, string](),
-		shareURL:      ttlcache.New[string, string](),
+		song:          ttlcache.New(time.Hour),
+		albumArtwork:  ttlcache.New(time.Hour),
+		artistArtwork: ttlcache.New(time.Hour),
+		shareURL:      ttlcache.New(time.Hour),
 	}
 
 	log.SetLevelFromString("warning")
