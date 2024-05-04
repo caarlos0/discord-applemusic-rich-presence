@@ -29,10 +29,10 @@ type Cache struct {
 
 func main() {
 	cache = Cache{
-		song:          ttlcache.New(time.Hour),
-		albumArtwork:  ttlcache.New(time.Hour),
-		artistArtwork: ttlcache.New(time.Hour),
-		shareURL:      ttlcache.New(time.Hour),
+		song:          ttlcache.New(time.Minute),
+		albumArtwork:  ttlcache.New(time.Minute),
+		artistArtwork: ttlcache.New(time.Minute),
+		shareURL:      ttlcache.New(time.Minute),
 	}
 	defer func() {
 		_ = cache.song.Close()
