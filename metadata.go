@@ -41,7 +41,10 @@ func get(url string, result interface{}) error {
 
 func getSongMetadata(key string) (SongMetadata, error) {
 	var result getSongMetadataResult
-	get(baseURL+"?types=songs&limit=1&term="+key, &result)
+	err := get(baseURL+"?types=songs&limit=1&term="+key, &result)
+	if err != nil {
+		return SongMetadata{}, err
+	}
 
 	if len(result.Songs.Data) == 0 {
 		return SongMetadata{}, nil
@@ -61,7 +64,10 @@ func getSongMetadata(key string) (SongMetadata, error) {
 
 func getArtistArtwork(key string) (string, error) {
 	var result getArtistMetadataResult
-	get(baseURL+"?types=artists&limit=1&term="+key, &result)
+	err := get(baseURL+"?types=artists&limit=1&term="+key, &result)
+	if err != nil {
+		return "", err
+	}
 
 	if len(result.Artists.Data) == 0 {
 		return "", nil
