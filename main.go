@@ -34,6 +34,12 @@ func main() {
 		artistArtwork: ttlcache.New(time.Hour),
 		shareURL:      ttlcache.New(time.Hour),
 	}
+	defer func() {
+		_ = cache.song.Close()
+		_ = cache.albumArtwork.Close()
+		_ = cache.artistArtwork.Close()
+		_ = cache.shareURL.Close()
+	}()
 
 	log.SetLevelFromString("warning")
 	if level := os.Getenv("LOG_LEVEL"); level != "" {
