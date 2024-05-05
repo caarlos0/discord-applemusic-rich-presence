@@ -107,6 +107,7 @@ func getMetadata(artist, album, song string) (Metadata, error) {
 			ShareURL:     shareURLCached.(string),
 		}
 	} else {
+		log.WithField("song", song).Debug("getting song metadata from api")
 		songMetadata, err = getSongMetadata(key)
 		if err != nil {
 			return Metadata{}, err
@@ -116,12 +117,14 @@ func getMetadata(artist, album, song string) (Metadata, error) {
 	if artistArtworkOk {
 		artistArtwork = artistArtworkCached.(string)
 	} else {
+		log.WithField("artist", artist).Debug("getting artist artwork from api")
 		artistArtwork, _ = getArtistArtwork(url.QueryEscape(artist))
 	}
 
 	cache.albumArtwork.Set(ttlcache.StringKey(key), songMetadata.AlbumArtwork, time.Hour)
 	cache.shareURL.Set(ttlcache.StringKey(key), songMetadata.ShareURL, time.Hour)
-	cache.artistArtwork.Set(ttlcache.StringKey(key), artistArtwork, time.Hour)
+
+	cache.artistArtwork.Set(ttlcache.StringKey(artist), artistArtwork, time.Hour)
 
 	return Metadata{
 		ID:            songMetadata.ID,
