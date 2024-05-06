@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
+
 release:
   footer: |
     **Full Changelog**: https://github.com/caarlos0/discord-applemusic-rich-presence/compare/{{ .PreviousTag }}...{{ .Tag }}
@@ -7,12 +9,12 @@ release:
     _Released with [GoReleaser Pro](https://goreleaser.com/pro)!_
 brews:
   - name: discord-applemusic-rich-presence
-    tap:
+    repository:
       owner: caarlos0
       name: homebrew-tap
-    folder: Formula
-    description: 'Apple Music Rich Presence for Discord'
-    homepage: 'https://caarlos0.dev'
+    directory: Formula
+    description: "Apple Music Rich Presence for Discord"
+    homepage: "https://caarlos0.dev"
     service: |
       run [opt_bin/"discord-applemusic-rich-presence"]
       keep_alive true
@@ -26,7 +28,7 @@ builds:
     goarch:
       - amd64
       - arm64
-    mod_timestamp: '{{ .CommitTimestamp }}'
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }} -X main.builtBy=goreleaser
     flags:
@@ -47,7 +49,7 @@ archives:
 changelog:
   filters:
     exclude:
-      - '^test:'
+      - "^test:"
       - ^chore
       - merge conflict
       - Merge pull request
@@ -77,5 +79,3 @@ before:
 gomod:
   proxy: true
   gobinary: go
-
-# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
