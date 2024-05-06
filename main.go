@@ -1,14 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
@@ -20,18 +15,30 @@ import (
 const statePlaying = "playing"
 
 var (
-	shortSleep    = 5 * time.Second
-	longSleep     = time.Minute
-	songCache     = ttlcache.New(time.Minute)
-	artworkCache  = ttlcache.New(time.Minute)
-	shareURLCache = ttlcache.New(time.Minute)
+	shortSleep = 5 * time.Second
+	longSleep  = time.Minute
+	cache      = Cache{}
 )
 
+type Cache struct {
+	song          *ttlcache.Cache
+	albumArtwork  *ttlcache.Cache
+	artistArtwork *ttlcache.Cache
+	shareURL      *ttlcache.Cache
+}
+
 func main() {
+	cache = Cache{
+		song:          ttlcache.New(time.Minute),
+		albumArtwork:  ttlcache.New(time.Minute),
+		artistArtwork: ttlcache.New(time.Minute),
+		shareURL:      ttlcache.New(time.Minute),
+	}
 	defer func() {
-		_ = songCache.Close()
-		_ = artworkCache.Close()
-		_ = shareURLCache.Close()
+		_ = cache.song.Close()
+		_ = cache.albumArtwork.Close()
+		_ = cache.artistArtwork.Close()
+		_ = cache.shareURL.Close()
 	}()
 
 	log.SetLevelFromString("warning")
@@ -86,202 +93,9 @@ func main() {
 	}
 }
 
-func timePtr(t time.Time) *time.Time {
-	return &t
-}
-
 func isRunning(app string) bool {
 	bts, err := exec.Command("pgrep", "-f", app).CombinedOutput()
 	return string(bts) != "" && err == nil
-}
-
-func tellMusic(s string) (string, error) {
-	bts, err := exec.Command(
-		"osascript",
-		"-e", "tell application \"Music\"",
-		"-e", s,
-		"-e", "end tell",
-	).CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", strings.TrimSpace(string(bts)), err)
-	}
-	return strings.TrimSpace(string(bts)), nil
-}
-
-func getNowPlaying() (Details, error) {
-	init := time.Now()
-	defer func() {
-		log.WithField("took", time.Since(init)).Info("got info")
-	}()
-
-	initialState, err := tellMusic("get {database id} of current track & {player position, player state}")
-	if err != nil {
-		return Details{}, err
-	}
-
-	songID, err := strconv.ParseInt(strings.Split(initialState, ", ")[0], 10, 64)
-	if err != nil {
-		return Details{}, err
-	}
-
-	position, err := strconv.ParseFloat(strings.Split(initialState, ", ")[1], 64)
-	if err != nil {
-		return Details{}, err
-	}
-
-	state := strings.Split(initialState, ", ")[2]
-	if state != statePlaying {
-		return Details{
-			State: state,
-		}, nil
-	}
-
-	cached, ok := songCache.Get(ttlcache.Int64Key(songID))
-	if ok {
-		log.WithField("songID", songID).Debug("got song from cache")
-		return Details{
-			Song:     cached.(Song),
-			Position: position,
-			State:    state,
-		}, nil
-	}
-
-	name, err := tellMusic("get {name} of current track")
-	if err != nil {
-		return Details{}, err
-	}
-	artist, err := tellMusic("get {artist} of current track")
-	if err != nil {
-		return Details{}, err
-	}
-	album, err := tellMusic("get {album} of current track")
-	if err != nil {
-		return Details{}, err
-	}
-	yearDuration, err := tellMusic("get {year, duration} of current track")
-	if err != nil {
-		return Details{}, err
-	}
-
-	year, err := strconv.Atoi(strings.Split(yearDuration, ", ")[0])
-	if err != nil {
-		return Details{}, err
-	}
-
-	duration, err := strconv.ParseFloat(strings.Split(yearDuration, ", ")[1], 64)
-	if err != nil {
-		return Details{}, err
-	}
-
-	metadata, err := getMetadata(artist, album, name)
-	if err != nil {
-		return Details{}, err
-	}
-
-	song := Song{
-		ID:       songID,
-		Name:     name,
-		Artist:   artist,
-		Album:    album,
-		Year:     year,
-		Duration: duration,
-		Artwork:  metadata.Artwork,
-		ShareURL: metadata.ShareURL,
-		ShareID:  metadata.ID,
-	}
-
-	songCache.Set(ttlcache.Int64Key(songID), song, 24*time.Hour)
-
-	return Details{
-		Song:     song,
-		Position: position,
-		State:    state,
-	}, nil
-}
-
-type Details struct {
-	Song     Song
-	Position float64
-	State    string
-}
-
-type Song struct {
-	ID       int64
-	Name     string
-	Artist   string
-	Album    string
-	Year     int
-	Duration float64
-	Artwork  string
-	ShareURL string
-	ShareID  string
-}
-
-func getMetadata(artist, album, song string) (Metadata, error) {
-	key := url.QueryEscape(strings.Join([]string{artist, album, song}, " "))
-	artworkCached, artworkOk := artworkCache.Get(ttlcache.StringKey(key))
-	shareURLCached, shareURLOk := shareURLCache.Get(ttlcache.StringKey(key))
-	if artworkOk && shareURLOk {
-		log.WithField("key", key).Debug("got album artwork from cache")
-		return Metadata{
-			Artwork:  artworkCached.(string),
-			ShareURL: shareURLCached.(string),
-		}, nil
-	}
-
-	baseURL := "https://tools.applemediaservices.com/api/apple-media/music/US/search.json?types=songs&limit=1"
-	resp, err := http.Get(baseURL + "&term=" + key)
-	if err != nil {
-		return Metadata{}, err
-	}
-	defer resp.Body.Close()
-
-	bts, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return Metadata{}, err
-	}
-
-	var result getMetadataResult
-	if err := json.Unmarshal(bts, &result); err != nil {
-		return Metadata{}, err
-	}
-	if len(result.Songs.Data) == 0 {
-		return Metadata{}, nil
-	}
-
-	id := result.Songs.Data[0].ID
-	artwork := result.Songs.Data[0].Attributes.Artwork.URL
-	artwork = strings.Replace(artwork, "{w}", "512", 1)
-	artwork = strings.Replace(artwork, "{h}", "512", 1)
-	shareURL := result.Songs.Data[0].Attributes.URL
-
-	artworkCache.Set(ttlcache.StringKey(key), artwork, time.Hour)
-	shareURLCache.Set(ttlcache.StringKey(key), shareURL, time.Hour)
-	return Metadata{
-		ID:       id,
-		Artwork:  artwork,
-		ShareURL: shareURL,
-	}, nil
-}
-
-type getMetadataResult struct {
-	Songs struct {
-		Data []struct {
-			ID         string `json:"id"`
-			Attributes struct {
-				URL     string `json:"url"`
-				Artwork struct {
-					URL string `json:"url"`
-				} `json:"artwork"`
-			} `json:"attributes"`
-		} `json:"data"`
-	} `json:"songs"`
-}
-
-type Metadata struct {
-	ID       string
-	Artwork  string
-	ShareURL string
 }
 
 type activityConnection struct {
@@ -321,7 +135,6 @@ func (ac *activityConnection) play(details Details) error {
 	ac.lastSongID = song.ID
 
 	start := time.Now().Add(-1 * time.Duration(details.Position) * time.Second)
-	// end := time.Now().Add(time.Duration(song.Duration-details.Position) * time.Second)
 	if !ac.connected {
 		if err := client.Login("861702238472241162"); err != nil {
 			log.WithError(err).Fatal("could not create rich presence client")
@@ -346,13 +159,12 @@ func (ac *activityConnection) play(details Details) error {
 	if err := client.SetActivity(client.Activity{
 		State:      fmt.Sprintf("by %s (%s)", song.Artist, song.Album),
 		Details:    song.Name,
-		LargeImage: firstNonEmpty(song.Artwork, "applemusic"),
-		SmallImage: "play",
-		LargeText:  song.Name,
-		SmallText:  fmt.Sprintf("%s by %s (%s)", song.Name, song.Artist, song.Album),
+		LargeImage: firstNonEmpty(song.AlbumArtwork, "applemusic"),
+		SmallImage: firstNonEmpty(song.ArtistArtwork, "play"),
+		LargeText:  song.Album,
+		SmallText:  song.Artist,
 		Timestamps: &client.Timestamps{
-			Start: timePtr(start),
-			// End:   timePtr(end),
+			Start: &start,
 		},
 		Buttons: buttons,
 	}); err != nil {
