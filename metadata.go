@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,7 +19,7 @@ type SongMetadata struct {
 	ShareURL     string
 }
 
-const baseURL = "https://tools.applemediaservices.com/api/apple-media/music/US/search.json"
+const baseURL = "https://itunes.apple.com/search"
 
 func get(url string, result interface{}) error {
 	resp, err := http.Get(url)
@@ -32,8 +33,12 @@ func get(url string, result interface{}) error {
 		return err
 	}
 
+	if resp.StatusCode >= 300 || resp.StatusCode < 200 {
+		return fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(bts))
+	}
+
 	if err := json.Unmarshal(bts, result); err != nil {
-		return err
+		return fmt.Errorf("%w: %s", err, string(bts))
 	}
 
 	return nil
